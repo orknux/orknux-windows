@@ -108,7 +108,11 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
     {
         var window = WindowArg(args, required: true);
         Front(window);
-        return Described(window);
+        var said = Described(window);
+        // Whether Windows let it come forward: an agent told plainly that it did not stops asking for pictures
+        // of a window that is behind another, and can say so instead.
+        said["inFront"] = GetForegroundWindow().ToInt64() == Handle(window);
+        return said;
     }
 
     private JsonNode Snapshot(JsonObject args)
@@ -244,23 +248,32 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
         {
             var window = WindowArg(args);
             Front(window);
-            image = Capture.Element(window);
             title = window.Name ?? "";
+            // The window as it paints itself, covered or not; the screen where it sits only when it will not.
+            if (WindowCapture.Print(new IntPtr(Handle(window))) is { } printed) return Encoded(printed, title, painted: true);
+            image = Capture.Element(window);
         }
-        using (image)
+        using (image) return Encoded(image.Bitmap, title, painted: false);
+    }
+
+    private static JsonObject Encoded(Bitmap bitmap, string title, bool painted)
+    {
+        using (painted ? bitmap : null)
         using (var bytes = new MemoryStream())
         {
             var jpeg = ImageCodecInfo.GetImageEncoders().First(codec => codec.FormatID == ImageFormat.Jpeg.Guid);
             using var quality = new EncoderParameters(1);
             quality.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 80L);
-            image.Bitmap.Save(bytes, jpeg, quality);
+            bitmap.Save(bytes, jpeg, quality);
             return new JsonObject
             {
                 ["data"] = Convert.ToBase64String(bytes.ToArray()),
                 ["mimeType"] = "image/jpeg",
                 ["title"] = title,
-                ["width"] = image.Bitmap.Width,
-                ["height"] = image.Bitmap.Height,
+                ["width"] = bitmap.Width,
+                ["height"] = bitmap.Height,
+                // Painted by the window itself, or copied off the screen - where whatever covers it shows instead.
+                ["how"] = painted ? "drawn by the window itself" : "copied from the screen where the window is",
             };
         }
     }
@@ -359,9 +372,37 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
         // for Notepad opened nothing. Wait until Windows says it is the foreground window, then a moment more
         // for it to give the keyboard focus to its own control.
         var handle = new IntPtr(lastWindow ?? 0);
-        for (var waited = 0; waited < ForegroundWaitMs && GetForegroundWindow() != handle; waited += 25) Thread.Sleep(25);
+        if (!CameForward(handle))
+        {
+            // Windows keeps a program that was not the last one touched from taking the foreground. An Alt
+            // press of our own counts as being touched, which is the accepted way past it; then ask again.
+            keybd_event(VK_MENU, 0, 0, UIntPtr.Zero);
+            keybd_event(VK_MENU, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+            SetForegroundWindow(handle);
+            CameForward(handle);
+        }
         Thread.Sleep(ActivatedMs);
     }
+
+    /** Waits for [handle] to be the foreground window, and says whether it became it. */
+    private static bool CameForward(IntPtr handle)
+    {
+        for (var waited = 0; waited < ForegroundWaitMs; waited += 25)
+        {
+            if (GetForegroundWindow() == handle) return true;
+            Thread.Sleep(25);
+        }
+        return GetForegroundWindow() == handle;
+    }
+
+    private const byte VK_MENU = 0x12;
+    private const uint KEYEVENTF_KEYUP = 0x0002;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern void keybd_event(byte key, byte scan, uint flags, UIntPtr extra);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
 
     /** How long a window is given to come to the front, and to settle once it has. */
     private const int ForegroundWaitMs = 1000;
