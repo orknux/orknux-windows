@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.Win32;
 using Orknux.Desktop.Core;
 
 namespace Orknux.Desktop;
@@ -14,14 +15,16 @@ namespace Orknux.Desktop;
 /// </summary>
 internal sealed class MainForm : Form
 {
-    private static readonly Color Background = Color.FromArgb(0x12, 0x12, 0x14);
-    private static readonly Color Panel = Color.FromArgb(0x1b, 0x1b, 0x1f);
-    private static readonly Color Line = Color.FromArgb(0x2c, 0x2c, 0x33);
-    private static readonly Color Ink = Color.FromArgb(0xe7, 0xe7, 0xea);
-    private static readonly Color Muted = Color.FromArgb(0x9a, 0x9a, 0xa3);
-    private static readonly Color Accent = Color.FromArgb(0x5b, 0x76, 0xd0);
-    private static readonly Color Good = Color.FromArgb(0x4c, 0xc3, 0x8a);
-    private static readonly Color Bad = Color.FromArgb(0xe5, 0x48, 0x4d);
+    /** The colours of the Windows theme in effect, changed when Windows changes it. */
+    private static Palette palette = Theme.Current();
+    private static Color Background => palette.Background;
+    private static Color Panel => palette.Panel;
+    private static Color Line => palette.Line;
+    private static Color Ink => palette.Ink;
+    private static Color Muted => palette.Muted;
+    private static Color Accent => palette.Accent;
+    private static Color Good => palette.Good;
+    private static Color Bad => palette.Bad;
 
     private const int StopHotkey = 0x4F4B;
     private const int WM_HOTKEY = 0x0312;
@@ -33,6 +36,15 @@ internal sealed class MainForm : Form
     private readonly Label state = new() { Text = "Not connected", AutoSize = true };
     private readonly Label message = new() { AutoSize = false, Height = 40, Visible = false };
     private readonly ListBox log = new() { IntegralHeight = false, BorderStyle = BorderStyle.None };
+    /** The Orknux mark, carried inside the program; the system's blank window if it somehow is not. */
+    private static readonly Icon Mark = LoadMark();
+
+    private static Icon LoadMark()
+    {
+        using var stream = typeof(MainForm).Assembly.GetManifestResourceStream("orknux.ico");
+        return stream is null ? SystemIcons.Application : new Icon(stream);
+    }
+
     private readonly NotifyIcon tray = new();
     private readonly Notice notice = new();
     private readonly Settings settings = Settings.Load();
@@ -51,7 +63,7 @@ internal sealed class MainForm : Form
         BackColor = Background;
         ForeColor = Ink;
         Font = new Font("Segoe UI", 9.5f);
-        Icon = SystemIcons.Application;
+        Icon = Mark;
 
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 9, BackColor = Background };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -105,7 +117,7 @@ internal sealed class MainForm : Form
         disconnect.Click += (_, _) => Stop("Disconnected.");
         AcceptButton = connect;
 
-        tray.Icon = SystemIcons.Application;
+        tray.Icon = Mark;
         tray.Text = "Orknux for Windows";
         tray.Visible = true;
         tray.DoubleClick += (_, _) => Reveal();
@@ -120,6 +132,8 @@ internal sealed class MainForm : Form
         base.OnHandleCreated(e);
         // Ctrl+Alt+Q, wherever the focus is: the one way to stop an agent mid-action without finding this window.
         RegisterHotKey(Handle, StopHotkey, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, (uint)Keys.Q);
+        Theme.TitleBar(Handle, palette.Dark);
+        SystemEvents.UserPreferenceChanged += ThemeMayHaveChanged;
     }
 
     protected override void WndProc(ref Message m)
@@ -298,9 +312,24 @@ internal sealed class MainForm : Form
         button.FlatStyle = FlatStyle.Flat;
         button.FlatAppearance.BorderColor = primary ? Accent : Line;
         button.BackColor = primary ? Accent : Background;
-        button.ForeColor = Color.White;
+        button.ForeColor = primary ? palette.OnAccent : Ink;
         button.AutoSize = true;
         button.Padding = new Padding(10, 3, 10, 3);
+    }
+
+    /// <summary>Windows says a preference changed; if it was the app mode, the window follows it at once.</summary>
+    private void ThemeMayHaveChanged(object? sender, UserPreferenceChangedEventArgs e)
+    {
+        if (e.Category != UserPreferenceCategory.General || IsDisposed) return;
+        BeginInvoke(() =>
+        {
+            var next = Theme.Current();
+            if (next == palette) return;
+            var pairs = palette.To(next);
+            palette = next;
+            Theme.Recolor(this, pairs);
+            Theme.TitleBar(Handle, palette.Dark);
+        });
     }
 
     private const uint MOD_ALT = 0x1, MOD_CONTROL = 0x2, MOD_NOREPEAT = 0x4000;
@@ -315,6 +344,8 @@ internal sealed class MainForm : Form
     {
         if (disposing)
         {
+            // A static event: left subscribed, it would hold the window for the life of the process.
+            SystemEvents.UserPreferenceChanged -= ThemeMayHaveChanged;
             connection?.Dispose();
             runner?.Dispose();
             notice.Dispose();

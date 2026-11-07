@@ -176,7 +176,7 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
                 Keyboard.Type(VirtualKeyShort.DELETE);
             }
         }
-        if (text.Length > 0) Keyboard.Type(text);
+        if (text.Length > 0) UnicodeKeyboard.Type(text);
         if (args.Flag("submit")) Keyboard.Type(VirtualKeyShort.ENTER);
         Settled();
         return new JsonObject { ["typed"] = args.Text("ref") ?? "where the focus was", ["submitted"] = args.Flag("submit") };

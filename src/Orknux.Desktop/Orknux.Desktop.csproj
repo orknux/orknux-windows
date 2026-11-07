@@ -13,7 +13,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Orknux.Desktop</RootNamespace>
     <AssemblyName>OrknuxForWindows</AssemblyName>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
+    <!-- The Orknux mark, the one the Chrome extension and the web app wear, for Explorer and the taskbar. -->
+    <ApplicationIcon>orknux.ico</ApplicationIcon>
     <!-- Clicks land where the screen says they are, on every monitor and scale. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
   </PropertyGroup>
@@ -21,6 +23,11 @@
   <ItemGroup>
     <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- And inside the program, for the window and the tray, which do not read the file's own icon. -->
+    <EmbeddedResource Include="orknux.ico" LogicalName="orknux.ico" />
   </ItemGroup>
 
   <ItemGroup>
