@@ -272,4 +272,46 @@ public class ConnectionTests
 
         Assert.Equal("Needs a client of version 2.", refused.Message);
     }
+
+    private static readonly string[] StartMenu =
+    [
+        "Musigium", "Uninstall Musigium", "Musigium Setup", "MuseScore 4", "Notepad", "Notepad++",
+        "IntelliJ IDEA 2026.2", "Windows Terminal", "Visual Studio Code", "KeePassXC",
+    ];
+
+    [Fact]
+    public void An_app_is_found_by_the_name_a_person_would_type() =>
+        Assert.Equal("Musigium", AppNames.Best("musigium", StartMenu));
+
+    [Fact]
+    public void The_app_comes_before_its_uninstaller_and_installer() =>
+        Assert.Equal("Musigium", AppNames.Best("Musigium", StartMenu.Reverse()));
+
+    [Fact]
+    public void A_whole_name_beats_a_longer_one_that_starts_with_it() =>
+        Assert.Equal("Notepad", AppNames.Best("notepad", StartMenu));
+
+    [Fact]
+    public void A_name_that_starts_with_what_was_asked_is_found() =>
+        Assert.Equal("IntelliJ IDEA 2026.2", AppNames.Best("intellij", StartMenu));
+
+    [Fact]
+    public void A_word_inside_the_name_is_found() =>
+        Assert.Equal("Visual Studio Code", AppNames.Best("studio code", StartMenu));
+
+    [Fact]
+    public void An_uninstaller_is_found_only_when_asked_for() =>
+        Assert.Equal("Uninstall Musigium", AppNames.Best("uninstall musigium", StartMenu));
+
+    [Fact]
+    public void Shortcut_endings_and_case_do_not_matter() =>
+        Assert.Equal("KeePassXC", AppNames.Best("keepassxc.lnk", ["KeePassXC.lnk".Replace(".lnk", ""), "Notepad"]));
+
+    [Fact]
+    public void Nothing_is_picked_for_a_name_no_app_has() =>
+        Assert.Null(AppNames.Best("photoshop", StartMenu));
+
+    [Fact]
+    public void Near_names_are_offered_when_nothing_matched() =>
+        Assert.Contains("MuseScore 4", AppNames.Near("musescore studio", StartMenu));
 }

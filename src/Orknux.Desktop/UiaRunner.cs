@@ -80,9 +80,19 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
         var target = args.Text("target") ?? throw new RefusedException("Say what to open: a program, a file, a folder or an address.");
         var before = TopWindows().Select(Handle).ToHashSet();
         Process? started;
+        string? startedAs = null;
         try
         {
             started = Process.Start(new ProcessStartInfo(target, args.Text("arguments") ?? "") { UseShellExecute = true });
+        }
+        catch (System.ComponentModel.Win32Exception missing) when (Bare(target))
+        {
+            // Not a program on the PATH: the name a person would type into the Start menu, looked up there.
+            var app = StartApps.Find(target, out var near) ?? throw new RefusedException(
+                $"Windows could not open \"{target}\": {missing.Message} Nothing in the Start menu is called that either." +
+                (near.Count > 0 ? " Close names there: " + string.Join(", ", near) + "." : ""));
+            started = Process.Start(new ProcessStartInfo(app.Start, args.Text("arguments") ?? "") { UseShellExecute = true });
+            startedAs = app.Name;
         }
         catch (Exception failed)
         {
@@ -101,8 +111,14 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
         if (opened is null) return new JsonObject { ["opened"] = target, ["note"] = "It started, but no window appeared yet. List the windows to find it." };
         lastWindow = Handle(opened);
         Wait.UntilResponsive(opened, TimeSpan.FromSeconds(5));
-        return Described(opened);
+        var said = Described(opened);
+        if (startedAs is not null) said["fromStartMenu"] = startedAs;
+        return said;
     }
+
+    /** A name with no folder, drive or scheme in it: something a person would type into the Start menu, not a path or an address. */
+    private static bool Bare(string target) =>
+        target.IndexOfAny(['\\', '/', ':']) < 0;
 
     private JsonNode Focus(JsonObject args)
     {
