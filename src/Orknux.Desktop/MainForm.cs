@@ -76,17 +76,23 @@ internal sealed class MainForm : Form
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        layout.Controls.Add(Caption("Server"));
+        // Each in its own row by number: placed in order, the table skips a hidden control, so while the
+        // error line below the buttons was hidden everything after it rose a row and the log, meant for the
+        // last row that takes the rest of the window, sat in a row the height of one line.
+        layout.Controls.Add(Caption("Server"), 0, 0);
         Field(server, "https://orknux.example.com");
-        layout.Controls.Add(server);
-        layout.Controls.Add(Caption("Pairing code or access token"));
+        layout.Controls.Add(server, 0, 1);
+        layout.Controls.Add(Caption("Pairing code or access token"), 0, 2);
         Field(token, "K7P-4QX or orkx_…");
-        layout.Controls.Add(token);
-        layout.Controls.Add(new Label
+        layout.Controls.Add(token, 0, 3);
+        var help = new Label
         {
             Text = "In Orknux, open Preferences › Connected clients and press Connect a client, then type the code here. A read and write access token works too. Your agents act on this computer as you while it is connected. Ctrl+Alt+Q stops them at any time.",
-            ForeColor = Muted, AutoSize = true, MaximumSize = new Size(420, 0), Margin = new Padding(0, 4, 0, 10),
-        });
+            ForeColor = Muted, AutoSize = true, Margin = new Padding(0, 4, 0, 10),
+        };
+        layout.Controls.Add(help, 0, 4);
+        // Wrapped at the window's width, whatever it is resized to, rather than at a fixed one.
+        layout.Resize += (_, _) => help.MaximumSize = new Size(Math.Max(200, layout.ClientSize.Width - layout.Padding.Horizontal), 0);
 
         var buttons = new FlowLayoutPanel { AutoSize = true, BackColor = Background, Margin = new Padding(0) };
         Style(connect, primary: true);
@@ -96,19 +102,19 @@ internal sealed class MainForm : Form
         state.ForeColor = Muted;
         state.Margin = new Padding(12, 8, 0, 0);
         buttons.Controls.Add(state);
-        layout.Controls.Add(buttons);
+        layout.Controls.Add(buttons, 0, 5);
 
         message.ForeColor = Bad;
         message.Dock = DockStyle.Fill;
-        layout.Controls.Add(message);
-        layout.Controls.Add(new Label { Text = "WHAT YOUR AGENTS DID", ForeColor = Muted, AutoSize = true, Margin = new Padding(0, 12, 0, 6), Font = new Font(Font.FontFamily, 8f) });
+        layout.Controls.Add(message, 0, 6);
+        layout.Controls.Add(new Label { Text = "WHAT YOUR AGENTS DID", ForeColor = Muted, AutoSize = true, Margin = new Padding(0, 12, 0, 6), Font = new Font(Font.FontFamily, 8f) }, 0, 7);
         log.BackColor = Panel;
         log.ForeColor = Ink;
         log.Dock = DockStyle.Fill;
         log.DrawMode = DrawMode.OwnerDrawFixed;
         log.ItemHeight = 22;
         log.DrawItem += DrawLogLine;
-        layout.Controls.Add(log);
+        layout.Controls.Add(log, 0, 8);
         Controls.Add(layout);
 
         server.Text = settings.Server;

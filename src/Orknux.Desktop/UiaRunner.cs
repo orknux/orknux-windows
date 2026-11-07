@@ -176,6 +176,9 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
                 Keyboard.Type(VirtualKeyShort.DELETE);
             }
         }
+        // Named a window and no element: that window in front first, as a key press does. Without it the
+        // text went to whatever had the focus - a window the person had just clicked into, in one test.
+        else if (args.Number("window") is not null) Front(WindowArg(args));
         if (text.Length > 0) UnicodeKeyboard.Type(text);
         if (args.Flag("submit")) Keyboard.Type(VirtualKeyShort.ENTER);
         Settled();
