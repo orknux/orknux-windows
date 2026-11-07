@@ -78,6 +78,20 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
     private JsonNode Open(JsonObject args)
     {
         var target = args.Text("target") ?? throw new RefusedException("Say what to open: a program, a file, a folder or an address.");
+        // An app already running is brought forward rather than started again - a second, third copy is what
+        // asking twice for Musigium left behind. Only by the program's own name, and only when not asked for a new one.
+        if (Bare(target) && !args.Flag("new"))
+        {
+            var running = TopWindows().FirstOrDefault(window => AppNames.IsProgram(target, ProgramOf(window)));
+            if (running is not null)
+            {
+                Front(running);
+                var already = Described(running);
+                already["alreadyRunning"] = true;
+                already["inFront"] = GetForegroundWindow().ToInt64() == Handle(running);
+                return already;
+            }
+        }
         var before = TopWindows().Select(Handle).ToHashSet();
         Process? started;
         string? startedAs = null;
@@ -107,12 +121,18 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
             opened = TopWindows().FirstOrDefault(w => !before.Contains(Handle(w)) &&
                 (started is null || SafeProcessId(w) == SafeId(started) || !string.IsNullOrEmpty(w.Name)));
         }
-        opened ??= WindowOf(GetForegroundWindow().ToInt64());
+        // The window that came to the front is the answer when it is the started program's, or new: what is
+        // handed back has to be what the person sees, not the first new window that happened to be listed.
+        var front = WindowOf(GetForegroundWindow().ToInt64());
+        if (front is not null && (!before.Contains(Handle(front)) || (started is not null && SafeProcessId(front) == SafeId(started))))
+            opened = front;
+        opened ??= front;
         if (opened is null) return new JsonObject { ["opened"] = target, ["note"] = "It started, but no window appeared yet. List the windows to find it." };
         lastWindow = Handle(opened);
         Wait.UntilResponsive(opened, TimeSpan.FromSeconds(5));
         var said = Described(opened);
         if (startedAs is not null) said["fromStartMenu"] = startedAs;
+        said["inFront"] = GetForegroundWindow().ToInt64() == Handle(opened);
         return said;
     }
 

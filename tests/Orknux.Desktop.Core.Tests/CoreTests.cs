@@ -314,4 +314,15 @@ public class ConnectionTests
     [Fact]
     public void Near_names_are_offered_when_nothing_matched() =>
         Assert.Contains("MuseScore 4", AppNames.Near("musescore studio", StartMenu));
+
+    [Theory]
+    [InlineData("musigium", "Musigium", true)]
+    [InlineData("MuseScore", "MuseScore4", true)]
+    [InlineData("musescore 4", "MuseScore4", true)]
+    [InlineData("notepad", "notepad", true)]
+    [InlineData("notepad", "notepad++", false)]
+    [InlineData("code", "codex", false)]
+    [InlineData("musigium", null, false)]
+    public void A_running_program_is_the_app_only_by_its_own_name(string asked, string? program, bool same) =>
+        Assert.Equal(same, AppNames.IsProgram(asked, program));
 }

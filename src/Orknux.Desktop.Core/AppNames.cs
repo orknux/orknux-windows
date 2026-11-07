@@ -54,6 +54,21 @@ public static class AppNames
         return int.MaxValue;
     }
 
+    /// <summary>
+    /// Whether a running program, by its process name ("Musigium", "MuseScore4",
+    /// "notepad"), is the app <paramref name="asked"/> names: the same name, or the
+    /// name with a version number after it. Strict on purpose - "notepad" must not
+    /// find Notepad++ already open and decide Notepad is running.
+    /// </summary>
+    public static bool IsProgram(string asked, string? program)
+    {
+        if (string.IsNullOrWhiteSpace(program)) return false;
+        var wanted = Normal(asked).Replace(" ", "");
+        var running = Normal(program).Replace(" ", "");
+        if (wanted.Length == 0) return false;
+        return running == wanted || (running.StartsWith(wanted, StringComparison.Ordinal) && running[wanted.Length..].All(char.IsDigit));
+    }
+
     /// <summary>Lower case, one space between words, and no ".lnk" or ".exe".</summary>
     public static string Normal(string text)
     {
