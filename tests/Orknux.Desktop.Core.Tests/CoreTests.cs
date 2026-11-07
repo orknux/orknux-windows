@@ -126,6 +126,28 @@ public class PairingTests
     [InlineData("O1L-4QX", false)]
     public void Tells_a_code_from_a_token(string typed, bool code) => Assert.Equal(code, Pairing.IsCode(typed));
 
+    [Theory]
+    [InlineData("http://192.168.0.190:8098/pair/U7N-HQE", "http://192.168.0.190:8098/", "U7N-HQE")]
+    [InlineData("https://orknux.example.com/pair/u7nhqe", "https://orknux.example.com/", "u7nhqe")]
+    [InlineData("  https://example.com/orknux/pair/K7P-4QX/  ", "https://example.com/orknux", "K7P-4QX")]
+    [InlineData("https://example.com/pair/x/pair/K7P-4QX", "https://example.com/pair/x", "K7P-4QX")]
+    public void A_pairing_link_is_split_into_server_and_code(string link, string server, string code)
+    {
+        Assert.True(Pairing.TryParseLink(link, out var parsed, out var said));
+        Assert.Equal(new Uri(server).ToString().TrimEnd('/'), parsed.ToString().TrimEnd('/'));
+        Assert.Equal(code, said);
+    }
+
+    [Theory]
+    [InlineData("K7P-4QX")]
+    [InlineData("https://orknux.example.com")]
+    [InlineData("https://orknux.example.com/pair/")]
+    [InlineData("https://orknux.example.com/pair/O1L-4QX")]
+    [InlineData("ftp://orknux.example.com/pair/K7P-4QX")]
+    [InlineData("orkx_abcdef")]
+    [InlineData("")]
+    public void Anything_else_is_not_a_pairing_link(string text) => Assert.False(Pairing.TryParseLink(text, out _, out _));
+
     [Fact]
     public async Task A_code_is_traded_for_a_credential_as_Windows()
     {

@@ -79,15 +79,15 @@ internal sealed class MainForm : Form
         // Each in its own row by number: placed in order, the table skips a hidden control, so while the
         // error line below the buttons was hidden everything after it rose a row and the log, meant for the
         // last row that takes the rest of the window, sat in a row the height of one line.
-        layout.Controls.Add(Caption("Server"), 0, 0);
-        Field(server, "https://orknux.example.com");
+        layout.Controls.Add(Caption("Pairing link or server"), 0, 0);
+        Field(server, "https://orknux.example.com/pair/K7P-4QX");
         layout.Controls.Add(server, 0, 1);
-        layout.Controls.Add(Caption("Pairing code or access token"), 0, 2);
-        Field(token, "K7P-4QX or orkx_…");
+        layout.Controls.Add(Caption("Access token, if not a pairing link"), 0, 2);
+        Field(token, "orkx_… (or the code alone)");
         layout.Controls.Add(token, 0, 3);
         var help = new Label
         {
-            Text = "In Orknux, open Preferences › Connected clients and press Connect a client, then type the code here. A read and write access token works too. Your agents act on this computer as you while it is connected. Ctrl+Alt+Q stops them at any time.",
+            Text = "Paste the pairing link from Orknux - Preferences › Connected clients › Connect a client - and press Connect. An access token with the server address works too. Your agents act on this computer as you while it is connected. Ctrl+Alt+Q stops them at any time.",
             ForeColor = Muted, AutoSize = true, Margin = new Padding(0, 4, 0, 10),
         };
         layout.Controls.Add(help, 0, 4);
@@ -177,6 +177,16 @@ internal sealed class MainForm : Form
     private async Task Connect()
     {
         Say(null);
+        // A pairing link pasted into either box is the server and the code at once.
+        foreach (var box in new[] { server, token })
+        {
+            if (Pairing.TryParseLink(box.Text, out var linked, out var linkCode))
+            {
+                server.Text = linked.ToString().TrimEnd('/');
+                token.Text = linkCode;
+                break;
+            }
+        }
         if (!Uri.TryCreate(server.Text.Trim(), UriKind.Absolute, out var address) || (address.Scheme != "https" && address.Scheme != "http"))
         {
             Say("That is not a server address. It starts with https://.");
@@ -184,7 +194,7 @@ internal sealed class MainForm : Form
         }
         if (token.Text.Trim().Length == 0)
         {
-            Say("Type the pairing code from Orknux, or paste an access token.");
+            Say("Paste the pairing link from Orknux, or a server address and an access token.");
             return;
         }
         if (Pairing.IsCode(token.Text))

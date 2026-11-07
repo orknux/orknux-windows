@@ -41,6 +41,27 @@ public static partial class Pairing
         }
     }
 
+    /// <summary>
+    /// Splits a pairing link - what Connect a client shows, the server and the
+    /// code in one thing to copy: <c>https://orknux.example.com/pair/K7P-4QX</c> -
+    /// into the two. Everything before the last <c>/pair/</c> is the server, so
+    /// one under a path prefix works too.
+    /// </summary>
+    public static bool TryParseLink(string text, out Uri server, out string code)
+    {
+        server = null!;
+        code = "";
+        var link = LinkShape().Match(text.Trim());
+        if (!link.Success || !Uri.TryCreate(link.Groups[1].Value, UriKind.Absolute, out var parsed)
+            || (parsed.Scheme != Uri.UriSchemeHttp && parsed.Scheme != Uri.UriSchemeHttps)) return false;
+        server = parsed;
+        code = link.Groups[2].Value;
+        return true;
+    }
+
     [GeneratedRegex("^[A-HJ-NP-Za-hj-np-z2-9]{3}-?[A-HJ-NP-Za-hj-np-z2-9]{3}$")]
     private static partial Regex CodeShape();
+
+    [GeneratedRegex("^(https?://.+)/pair/([A-HJ-NP-Za-hj-np-z2-9]{3}-?[A-HJ-NP-Za-hj-np-z2-9]{3})/?$", RegexOptions.IgnoreCase)]
+    private static partial Regex LinkShape();
 }
