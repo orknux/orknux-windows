@@ -78,13 +78,18 @@ internal static class UnicodeKeyboard
                     break;
             }
         }
-        // In slices, so a long text does not arrive faster than a slow window takes it.
-        foreach (var slice in events.Chunk(64))
+        // One character at a time, with a breath between. Sent as one burst, Windows 11 Notepad kept the first
+        // few characters of each batch and dropped the rest: "Hello from Orknux - zażółć gęślą jaźń" arrived as
+        // "Hello aźń". A person types slower than this, and every editor keeps up with a person.
+        for (var i = 0; i < events.Count; i += 2)
         {
-            SendInput((uint)slice.Length, slice, Marshal.SizeOf<INPUT>());
-            Thread.Sleep(5);
+            SendInput(2, [events[i], events[i + 1]], Marshal.SizeOf<INPUT>());
+            Thread.Sleep(KeyGapMs);
         }
     }
+
+    /** The pause after each character: 37 characters take a third of a second, a page of text half a minute. */
+    private const int KeyGapMs = 8;
 
     private static void Key(List<INPUT> events, ushort key)
     {

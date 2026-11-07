@@ -349,7 +349,17 @@ internal sealed class UiaRunner : ICommandRunner, IDisposable
         try { window.AsWindow().SetForeground(); } catch (Exception) { /* a window that refuses still takes clicks */ }
         lastWindow = Handle(window);
         Wait.UntilInputIsProcessed();
+        // Asked to the front is not yet in front: keys sent at once went to the window before it, and a Ctrl+T
+        // for Notepad opened nothing. Wait until Windows says it is the foreground window, then a moment more
+        // for it to give the keyboard focus to its own control.
+        var handle = new IntPtr(lastWindow ?? 0);
+        for (var waited = 0; waited < ForegroundWaitMs && GetForegroundWindow() != handle; waited += 25) Thread.Sleep(25);
+        Thread.Sleep(ActivatedMs);
     }
+
+    /** How long a window is given to come to the front, and to settle once it has. */
+    private const int ForegroundWaitMs = 1000;
+    private const int ActivatedMs = 120;
 
     private JsonObject Described(AutomationElement? window) => window is null
         ? new JsonObject()
