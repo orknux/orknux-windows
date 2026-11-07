@@ -14,6 +14,13 @@ internal sealed class Settings
     public string Server { get; set; } = "";
     public string ProtectedToken { get; set; } = "";
 
+    /**
+     * Whether to connect again on the next start: set by a connection that
+     * worked, cleared by the person disconnecting or pressing Ctrl+Alt+Q, so an
+     * update or a restart picks up where it was and a deliberate stop stays one.
+     */
+    public bool Reconnect { get; set; }
+
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Orknux", "desktop.json");
 

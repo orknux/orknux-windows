@@ -120,7 +120,13 @@ internal sealed class MainForm : Form
         server.Text = settings.Server;
         token.Text = settings.Token;
         connect.Click += async (_, _) => await Connect();
-        disconnect.Click += (_, _) => Stop("Disconnected.");
+        disconnect.Click += (_, _) => Stop("Disconnected.", byPerson: true);
+        // Connected when it last ran, and not disconnected since: connect again by itself, as it was.
+        Shown += async (_, _) =>
+        {
+            if (settings.Reconnect && settings.Server.Length > 0 && settings.Token.Length > 0 && !Pairing.IsCode(settings.Token))
+                await Connect();
+        };
         AcceptButton = connect;
 
         tray.Icon = Mark;
@@ -129,7 +135,7 @@ internal sealed class MainForm : Form
         tray.DoubleClick += (_, _) => Reveal();
         tray.ContextMenuStrip = new ContextMenuStrip();
         tray.ContextMenuStrip.Items.Add("Open", null, (_, _) => Reveal());
-        tray.ContextMenuStrip.Items.Add("Disconnect", null, (_, _) => Stop("Disconnected."));
+        tray.ContextMenuStrip.Items.Add("Disconnect", null, (_, _) => Stop("Disconnected.", byPerson: true));
         tray.ContextMenuStrip.Items.Add("Quit", null, (_, _) => { quitting = true; Close(); });
     }
 
@@ -146,7 +152,7 @@ internal sealed class MainForm : Form
     {
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == StopHotkey && running is not null)
         {
-            Stop("Stopped with Ctrl+Alt+Q.");
+            Stop("Stopped with Ctrl+Alt+Q.", byPerson: true);
             Reveal();
         }
         base.WndProc(ref m);
@@ -220,6 +226,8 @@ internal sealed class MainForm : Form
             var user = await connection.HelloAsync(running.Token);
             Showing(connected: true);
             SetState($"Connected as {user}", Good);
+            settings.Reconnect = true;
+            settings.Save();
             Log($"Connected to {address.Host} as {user}", false);
             var loop = running;
             _ = Task.Run(async () =>
@@ -240,8 +248,14 @@ internal sealed class MainForm : Form
         }
     }
 
-    private void Stop(string? reason)
+    /// <param name="byPerson">The person stopped it - Disconnect, or Ctrl+Alt+Q - so the next start does not connect again by itself.</param>
+    private void Stop(string? reason, bool byPerson = false)
     {
+        if (byPerson && settings.Reconnect)
+        {
+            settings.Reconnect = false;
+            settings.Save();
+        }
         if (running is null) return;
         running.Cancel();
         running = null;
