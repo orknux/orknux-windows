@@ -13,7 +13,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Orknux.Desktop</RootNamespace>
     <AssemblyName>OrknuxForWindows</AssemblyName>
-    <Version>1.0.6</Version>
+    <Version>1.0.7</Version>
     <!-- The Orknux mark, the one the Chrome extension and the web app wear, for Explorer and the taskbar. -->
     <ApplicationIcon>orknux.ico</ApplicationIcon>
     <!-- Clicks land where the screen says they are, on every monitor and scale. -->

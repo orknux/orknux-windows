@@ -57,7 +57,8 @@ internal sealed class MainForm : Form
 
     public MainForm()
     {
-        Text = "Orknux for Windows";
+        // The version in the title and the tray, so whoever is asked which one they run can read it off.
+        Text = $"Orknux for Windows {version}";
         ClientSize = new Size(460, 560);
         MinimumSize = new Size(380, 420);
         BackColor = Background;
@@ -130,7 +131,7 @@ internal sealed class MainForm : Form
         AcceptButton = connect;
 
         tray.Icon = Mark;
-        tray.Text = "Orknux for Windows";
+        tray.Text = $"Orknux for Windows {version}";
         tray.Visible = true;
         tray.DoubleClick += (_, _) => Reveal();
         tray.ContextMenuStrip = new ContextMenuStrip();
@@ -285,7 +286,7 @@ internal sealed class MainForm : Form
         disconnect.Visible = connected;
         server.Enabled = !connected;
         token.Enabled = !connected;
-        tray.Text = connected ? "Orknux for Windows - connected" : "Orknux for Windows";
+        tray.Text = connected ? $"Orknux for Windows {version} - connected" : $"Orknux for Windows {version}";
     }
 
     private void Reveal()
