@@ -1,0 +1,136 @@
+# Orknux for Windows: the core's tests on every push, and on a v* tag the
+# self-contained exe - signed where a signing account is configured - attached
+# to a GitHub release and offered through orknux.ai.
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      # The connection, the protocol, key chords and snapshots: no Windows in them, so they run anywhere.
+      - run: dotnet test tests/Orknux.Desktop.Core.Tests
+
+  build:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+    env:
+      # Whether a signing account is configured: a secret cannot be read in a step's `if`, an env set from it can.
+      SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' && 'yes' || '' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # A tag that is not the version built would be offered as an update it is not.
+      - name: The tag is the version built
+        run: |
+          built="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Orknux.Desktop/Orknux.Desktop.csproj | head -1)"
+          [ "v$built" = "$GITHUB_REF_NAME" ] || { echo "::error::Orknux.Desktop.csproj says $built and the tag is $GITHUB_REF_NAME"; exit 1; }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish the exe
+        run: dotnet publish src/Orknux.Desktop -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+
+      # Azure Trusted Signing, where its secrets are set: an exe Windows knows the publisher of, which SmartScreen
+      # lets run without "Windows protected your PC". Without them the release is unsigned and says so.
+      - name: Sign
+        if: env.SIGNING == 'yes'
+        uses: azure/trusted-signing-action@v2.0.0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: publish
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Unsigned
+        if: env.SIGNING != 'yes'
+        run: echo "::warning::The Azure Trusted Signing secrets are not set, so OrknuxForWindows.exe is unsigned and SmartScreen will warn on the first run."
+
+      - name: Checksum
+        run: |
+          mkdir -p dist
+          cp publish/OrknuxForWindows.exe dist/
+          (cd dist && sha256sum OrknuxForWindows.exe > SHA256SUMS && cat SHA256SUMS)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orknux-windows
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: orknux-windows
+          path: dist
+
+      - name: Release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v h="## $version" '$0==h {on=1; next} /^## / && on {exit} on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ -s "$RUNNER_TEMP/notes.md" ] || { echo "::error::CHANGELOG.md has no section ## $version"; exit 1; }
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body_path: ${{ runner.temp }}/notes.md
+
+      # orknux.ai (docs/orknux-ai/client-releases.graphql in orknux-server): declared, then sent at the offset the
+      # site reports, as the Shell's are. The GitHub release above stands either way, so a refusal here is said and
+      # does not fail the release.
+      - name: Offer it through orknux.ai
+        env:
+          TOKEN: ${{ secrets.ORKNUX_AI_PUBLISH_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if [ -z "$TOKEN" ]; then
+            echo "::notice::ORKNUX_AI_PUBLISH_TOKEN is not set, so $version is on GitHub only."
+            exit 0
+          fi
+          file=dist/OrknuxForWindows.exe
+          size="$(stat -c %s "$file")"
+          jq -n --arg v "$version" --rawfile notes "$RUNNER_TEMP/notes.md" --arg s "$(sha256sum "$file" | cut -d' ' -f1)" --argjson n "$size" \
+            '{version: $v, changelog: $notes, files: [{platform: "windows-x64", sha256: $s, size: $n}]}' > "$RUNNER_TEMP/release.json"
+          site="https://orknux.ai/api/client-releases/windows"
+          answer="$(curl -sS --retry 4 -X POST "$site" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' --data "@$RUNNER_TEMP/release.json")"
+          if ! jq -e '.files' <<<"$answer" >/dev/null 2>&1; then
+            echo "::warning::orknux.ai did not take $version: $answer"
+            exit 0
+          fi
+          piece=$((90 * 1024 * 1024))
+          while [ "$(jq -r '.files[0].complete' <<<"$answer")" != "true" ]; do
+            offset="$(jq -r '.files[0].received' <<<"$answer")"
+            dd if="$file" of="$RUNNER_TEMP/piece" iflag=skip_bytes,count_bytes skip="$offset" count="$piece" status=none
+            answer="$(curl -sS --retry 4 -X PUT "$site/$version/files/windows-x64?offset=$offset" -H "Authorization: Bearer $TOKEN" \
+              -H 'Content-Type: application/octet-stream' --data-binary "@$RUNNER_TEMP/piece")"
+            jq -e '.files' <<<"$answer" >/dev/null 2>&1 || { echo "::warning::orknux.ai refused a piece at $offset: $answer"; exit 0; }
+          done
+          echo "$version is offered through orknux.ai: published $(jq -r '.published' <<<"$answer")"
