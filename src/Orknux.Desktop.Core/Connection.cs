@@ -91,7 +91,7 @@ public sealed class Connection : IDisposable
             try
             {
                 response = await http.GetAsync(
-                    new Uri(server, $"api/desktop/next?wait={WaitSeconds}&client=Windows&version={Uri.EscapeDataString(version)}"), cancel);
+                    new Uri(server, $"api/desktop/next?wait={WaitSeconds}&client=Windows&version={Uri.EscapeDataString(version)}&instance={Uri.EscapeDataString("Windows on " + Environment.MachineName)}"), cancel);
             }
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
